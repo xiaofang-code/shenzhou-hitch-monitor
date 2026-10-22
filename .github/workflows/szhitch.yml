@@ -73,6 +73,8 @@ jobs:
           SZHITCH_SMTP_PASS: ${{ secrets.SZHITCH_SMTP_PASS }}
           SZHITCH_SMTP_TO: ${{ secrets.SZHITCH_SMTP_TO }}
           SZHITCH_SMTP_FROM: ${{ secrets.SZHITCH_SMTP_FROM }}
+          SZHITCH_SUB_API: ${{ secrets.SZHITCH_SUB_API }}       # 邮箱订阅 Worker（cloud/cf_worker）
+          SZHITCH_SUB_TOKEN: ${{ secrets.SZHITCH_SUB_TOKEN }}
           SZHITCH_WECOM: ${{ secrets.SZHITCH_WECOM }}
           SZHITCH_FEISHU: ${{ secrets.SZHITCH_FEISHU }}
           SZHITCH_BARK: ${{ secrets.SZHITCH_BARK }}
@@ -103,6 +105,16 @@ jobs:
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dashboard
+
+      # 国内访问 github.io 不稳，同时发一份到 Cloudflare Pages；失败不影响 GitHub Pages
+      - name: 发布到 Cloudflare Pages
+        continue-on-error: true
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then echo "未配置 CLOUDFLARE_API_TOKEN，跳过"; exit 0; fi
+          npx --yes wrangler@4.148.0 pages deploy dashboard --project-name szhitch --branch main --commit-dirty=true
 
   deploy:
     needs: check

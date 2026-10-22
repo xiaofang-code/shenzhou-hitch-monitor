@@ -55,18 +55,23 @@ def parse_issue_body(body: str) -> dict[str, Any] | None:
             continue
         if isinstance(data, list):
             data = data[0] if data else None
-        if not isinstance(data, dict):
-            continue
-        cleaned = {k: v for k, v in data.items() if k in ALLOWED_KEYS}
-        has_filter = any(
-            k in cleaned and cleaned[k]
-            for k in ("pickup_cities", "return_cities", "any_cities", "routes",
-                      "brands", "models", "max_price", "max_price_per_day")
-        )
-        if not has_filter:
-            continue
-        return cleaned
+        cleaned = clean_profile(data)
+        if cleaned:
+            return cleaned
     return None
+
+
+def clean_profile(data: Any) -> dict[str, Any] | None:
+    """只保留 ALLOWED_KEYS；没有任何筛选条件时返回 None（避免订阅全量）。"""
+    if not isinstance(data, dict):
+        return None
+    cleaned = {k: v for k, v in data.items() if k in ALLOWED_KEYS}
+    has_filter = any(
+        k in cleaned and cleaned[k]
+        for k in ("pickup_cities", "return_cities", "any_cities", "routes",
+                  "brands", "models", "max_price", "max_price_per_day")
+    )
+    return cleaned if has_filter else None
 
 
 def parse_issue(issue: dict[str, Any]) -> dict[str, Any] | None:
@@ -105,6 +110,33 @@ def fetch_subscriptions(repo: str, *, token: str = "", timeout: float = TIMEOUT)
         parsed = parse_issue(issue)
         if parsed:
             subs.append(parsed)
+    return subs
+
+
+def fetch_worker_subscriptions(api: str, token: str, *, timeout: float = TIMEOUT) -> list[dict[str, Any]]:
+    """读取邮箱订阅 Worker（cloud/cf_worker）里已确认的订阅，返回订阅档案列表。
+
+    档案带 __email / __id / __unsub（该订阅的退订链接），没有 __issue。
+    """
+    api = str(api or "").rstrip("/")
+    req = urllib.request.Request(
+        f"{api}/subscriptions",
+        headers={"Authorization": f"Bearer {token}", "User-Agent": "szhitch-monitor"},
+    )
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        data = json.loads(resp.read().decode("utf-8", "replace"))
+
+    records = (data.get("subscriptions") if isinstance(data, dict) else None) or []
+    subs: list[dict[str, Any]] = []
+    for rec in records:
+        profile = clean_profile(rec.get("profile"))
+        email = str(rec.get("email") or "").strip()
+        if not profile or not email:
+            continue
+        profile.pop("email", None)
+        query = urllib.parse.urlencode({"id": rec.get("id", ""), "t": rec.get("token", "")})
+        subs.append({**profile, "__email": email, "__id": str(rec.get("id") or ""),
+                     "__unsub": f"{api}/unsubscribe?{query}"})
     return subs
 
 

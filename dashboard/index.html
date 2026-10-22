@@ -383,11 +383,12 @@
     <aside>
       <div class="panel">
         <h2>订阅 · 邮件提醒</h2>
-        <div class="watch-rule" id="watchRule">在左侧选好城市、路线、品牌后，点「一键订阅」——条件会存成仓库里的一个 Issue，监控每轮自动读取并推送，无需改 config.json。</div>
+        <div class="watch-rule" id="watchRule">在左侧选好城市、路线、品牌后，填邮箱点「一键订阅」，监控每轮自动读取并推送。</div>
         <div class="subform">
-          <input id="subEmail" type="email" placeholder="接收提醒的邮箱（可选）" autocomplete="email">
+          <input id="subEmail" type="email" placeholder="接收提醒的邮箱" autocomplete="email">
           <button id="createSub">⚡ 一键订阅</button>
         </div>
+        <div class="hint" id="issueSubWrap" style="margin-top:6px" hidden>有 GitHub 账号？也可以 <a href="#" id="issueSub">用 GitHub Issue 订阅</a></div>
         <div id="remoteSubs"></div>
         <details style="margin-top:10px">
           <summary style="color:var(--dim);font-size:11.5px;cursor:pointer">高级：手动改 config.json</summary>
@@ -398,8 +399,8 @@
           <div id="watchProfiles"></div>
         </details>
         <div class="hint">
-          一键订阅 = 在仓库创建一个 Issue：<b>开启即订阅、关闭即退订</b>，改条件直接编辑 Issue。
-          命中时监控会回执到 Issue（GitHub 自动发邮件给你）；仓库 Secrets 里若配了 SMTP，还会直发到上面的邮箱。
+          邮箱订阅：不需要 GitHub 账号，<b>点确认邮件里的链接才生效</b>，每封提醒底部都能一键退订。
+          GitHub Issue 订阅：<b>开启即订阅、关闭即退订</b>，改条件直接编辑 Issue；命中时监控会回执到 Issue（GitHub 自动发邮件给你）。
         </div>
       </div>
 
@@ -758,13 +759,15 @@ function renderWatchPanel(){
   const desc = describeRules(r);
   $("#watchRule").innerHTML = desc
     ? `将订阅：<br>${desc}<div style="color:var(--dim);margin-top:7px">当前命中 ${fmt(filtered().length)} 条</div>`
-    : `在左侧选好城市、路线、品牌后，点「一键订阅」——条件会存成仓库里的一个 Issue，监控每轮自动读取并推送，无需改 config.json。`;
+    : `在左侧选好城市、路线、品牌后，填邮箱点「一键订阅」，监控每轮自动读取并推送。`;
 
   const repo = DATA.repo || "";
+  const api = DATA.sub_api || "";
   const btn = $("#createSub");
-  const ready = !!Object.keys(r).length && !!repo;
+  const ready = !!Object.keys(r).length && !!(api || repo);
   btn.disabled = !ready;
-  btn.textContent = repo ? "⚡ 一键订阅" : "⚡ 一键订阅（需配置 subscribe.repo）";
+  btn.textContent = (api || repo) ? "⚡ 一键订阅" : "⚡ 一键订阅（需配置订阅服务）";
+  $("#issueSubWrap").hidden = !(api && repo);
 
   const w = DATA.watch || {};
   const box = $("#watchProfiles");
@@ -801,10 +804,10 @@ async function loadRemoteSubs(){
     const subs = (Array.isArray(issues) ? issues : [])
       .filter(i => !i.pull_request && String(i.title || "").trim().startsWith("[订阅]"));
     if(!subs.length){
-      box.innerHTML = `<div class="hint" style="margin-top:10px">当前没有生效的订阅——填好邮箱点上面「⚡ 一键订阅」即可。</div>`;
+      box.innerHTML = ``;
       return;
     }
-    box.innerHTML = `<div class="hint" style="margin-top:12px">已生效订阅（点开可改条件，关闭即退订）</div>` +
+    box.innerHTML = `<div class="hint" style="margin-top:12px">GitHub Issue 订阅（点开可改条件，关闭即退订）</div>` +
       subs.map(i => {
         const name = esc(String(i.title || "").replace(/^\[订阅\]\s*/, ""));
         return `<div class="prof"><b><a href="${esc(i.html_url)}" target="_blank" rel="noopener">#${i.number} ${name}</a></b>
@@ -965,21 +968,51 @@ $("#copyWatchCmd").onclick = () => {
   if(!Object.keys(r).length){ toast("先在左侧选点条件"); return; }
   copyText(JSON.stringify(r, null, 2));
 };
-$("#createSub").onclick = () => {
+function subscribeProfile(){
   const r = watchRules();
-  if(!Object.keys(r).length){ toast("先在左侧选点条件"); return; }
-  const repo = DATA.repo || "";
-  if(!repo){ toast("缺少 subscribe.repo 配置，暂不能一键订阅"); return; }
+  if(!Object.keys(r).length){ toast("先在左侧选点条件"); return null; }
   const email = $("#subEmail").value.trim();
-  if(email && !/^\S+@\S+\.\S+$/.test(email)){ toast("邮箱格式不对"); return; }
+  if(email && !/^\S+@\S+\.\S+$/.test(email)){ toast("邮箱格式不对"); return null; }
   const name = [state.from, state.to].filter(Boolean).join("→")
     || (r.brands ? r.brands.slice(0, 2).join("/") : "") || "我的订阅";
-  const profile = { name, ...r };
-  if(email) profile.email = email;
-  window.open(subscribeIssueUrl(repo, profile), "_blank", "noopener");
+  return { profile: { name, ...r }, email };
+}
+
+/* 邮箱订阅（cloud/cf_worker）：不需要 GitHub 账号，确认邮件点一下才生效 */
+async function subscribeByEmail(api){
+  const s = subscribeProfile();
+  if(!s) return;
+  if(!s.email){ toast("请填写接收提醒的邮箱"); return; }
+  const btn = $("#createSub");
+  btn.disabled = true;
+  try{
+    const r = await fetch(api + "/subscribe", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({email: s.email, profile: s.profile}),
+    });
+    const data = await r.json().catch(() => ({}));
+    toast(r.ok ? "确认邮件已发送，到邮箱点链接即生效" : (data.error || "订阅失败：HTTP " + r.status));
+  }catch(e){
+    toast("订阅失败，请稍后再试");
+  }finally{
+    btn.disabled = false;
+  }
+}
+
+function subscribeByIssue(){
+  const repo = DATA.repo || "";
+  if(!repo){ toast("缺少 subscribe.repo 配置，暂不能用 Issue 订阅"); return; }
+  const s = subscribeProfile();
+  if(!s) return;
+  if(s.email) s.profile.email = s.email;
+  window.open(subscribeIssueUrl(repo, s.profile), "_blank", "noopener");
   toast("已在 GitHub 打开订阅 Issue，提交后下轮监控自动生效");
   setTimeout(loadRemoteSubs, 8000);
-};
+}
+
+$("#createSub").onclick = () => DATA.sub_api ? subscribeByEmail(DATA.sub_api) : subscribeByIssue();
+$("#issueSub").onclick = e => { e.preventDefault(); subscribeByIssue(); };
 $("#reload").addEventListener("click", load);
 
 load();

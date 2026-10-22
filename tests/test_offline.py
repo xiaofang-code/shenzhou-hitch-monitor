@@ -375,6 +375,35 @@ class TestSubscriberEmail(unittest.TestCase):
         self.mon._email_subscribers(events, ScanStats(total=3))
         self.assertEqual(sorted(to for to, _ in self.smtp.sent), [["a@x.com"], ["b@x.com"]])
 
+    def test_worker_subscriber_mail_has_unsubscribe_link(self):
+        self.mon.subscriptions[0]["__unsub"] = "https://api.example/unsubscribe?id=1&t=x"
+        self.mon.subscriptions[0]["name"] = "张掖出发"
+        self.mon._email_subscribers([Event("new", self.items[0])], ScanStats(total=3))
+        (to, msg), = self.smtp.sent
+        self.assertEqual(to, ["a@x.com"])
+        self.assertIn("退订「张掖出发」：https://api.example/unsubscribe?id=1&t=x", msg.plain)
+        self.assertIn('href="https://api.example/unsubscribe?id=1&amp;t=x"', msg.html)
+        self.assertTrue(msg.html.rstrip().endswith("</html>"))
+
+    def test_comment_skips_worker_subscriptions(self):
+        from unittest import mock
+        self.mon.subscriptions = [{"pickup_cities": [self.items[0].pickup_city], "__email": "a@x.com"}]
+        with mock.patch("szhitch.subscriptions.comment_on_issue") as comment, \
+                mock.patch.dict("os.environ", {"GITHUB_TOKEN": "t"}):
+            self.mon._comment_subscriptions([Event("new", self.items[0])])
+        comment.assert_not_called()
+
+    def test_refresh_merges_issue_and_worker_sources(self):
+        from unittest import mock
+        worker = [{"pickup_cities": ["成都"], "__email": "w@x.com", "__unsub": "u"}]
+        env = {"GITHUB_REPOSITORY": "me/repo", "SZHITCH_SUB_API": "https://api", "SZHITCH_SUB_TOKEN": "k"}
+        with mock.patch("szhitch.subscriptions.fetch_subscriptions", side_effect=OSError("down")), \
+                mock.patch("szhitch.subscriptions.fetch_worker_subscriptions", return_value=worker), \
+                mock.patch.dict("os.environ", env):
+            self.mon._refresh_subscriptions()
+        self.assertEqual(self.mon.subscriptions, worker)
+        self.assertEqual(self.mon.subscription_emails, ["w@x.com"])
+
     def test_refresh_does_not_touch_admin_recipients(self):
         from unittest import mock
         subs = list(self.mon.subscriptions)

@@ -1,0 +1,18 @@
+# 邮箱订阅 Worker。部署：在本目录执行
+#   npx wrangler@4.148.0 deploy
+#   npx wrangler@4.148.0 secret put RESEND_API_KEY   # Resend 发信 key
+#   npx wrangler@4.148.0 secret put ADMIN_TOKEN      # 与仓库 Secret SZHITCH_SUB_TOKEN 相同
+name = "szhitch-sub"
+main = "worker.js"
+compatibility_date = "2026-10-01"
+workers_dev = false
+
+# *.workers.dev 在国内基本打不开，必须挂自己的域名
+routes = [{ pattern = "hitch-api.relvexes.com", custom_domain = true }]
+
+kv_namespaces = [{ binding = "SUBS", id = "9ef1e176d6914236a505f91b45df2262" }]
+
+[vars]
+MAIL_FROM = "alert@relvexes.com"
+PUBLIC_URL = "https://hitch-api.relvexes.com"
+ALLOWED_ORIGINS = "https://xiaofang-code.github.io,https://hitch.relvexes.com"

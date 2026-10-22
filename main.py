@@ -117,6 +117,8 @@ def _write_dashboard(monitor: Monitor, path: Path) -> dict:
         ),
         repo=_dashboard_repo(monitor.cfg),
     )
+    # 邮箱订阅 Worker 地址（cloud/cf_worker），面板据此显示「填邮箱订阅」
+    payload["sub_api"] = os.environ.get("SZHITCH_SUB_API", "").rstrip("/")
     path.write_text(
         json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
         encoding="utf-8",

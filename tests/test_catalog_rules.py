@@ -28,6 +28,7 @@ from szhitch.monitor import Event, Monitor, ScanStats  # noqa: E402
 from szhitch.rules import ProfileSet, RuleSet, build_profiles, parse_route, route_match  # noqa: E402
 from szhitch.store import JsonStore, SqliteStore  # noqa: E402
 from szhitch.subscriptions import (  # noqa: E402
+    fetch_worker_subscriptions,
     is_subscription_title,
     new_issue_url,
     parse_issue,
@@ -415,6 +416,28 @@ class TestSubscriptions(unittest.TestCase):
         rules = RuleSet.from_config({"name": "x", "email": "me@example.com",
                                      "pickup_cities": ["成都"]})
         self.assertTrue(rules.evaluate(item("成都", "丽江"))[0])
+
+    def test_fetch_worker_subscriptions(self):
+        import json
+        from unittest import mock
+        payload = {"subscriptions": [
+            {"id": "abc", "token": "tk", "email": "a@x.com",
+             "profile": {"name": "成都", "pickup_cities": ["成都"], "evil": 1, "email": "b@x.com"}},
+            {"id": "n", "token": "t", "email": "c@x.com", "profile": {"name": "无条件"}},
+        ]}
+        resp = mock.MagicMock()
+        resp.__enter__.return_value.read.return_value = json.dumps(payload).encode()
+        with mock.patch("urllib.request.urlopen", return_value=resp) as urlopen:
+            subs = fetch_worker_subscriptions("https://api.example/", "secret")
+        req = urlopen.call_args[0][0]
+        self.assertEqual(req.full_url, "https://api.example/subscriptions")
+        self.assertEqual(req.get_header("Authorization"), "Bearer secret")
+        self.assertEqual(len(subs), 1)  # 无筛选条件的被丢弃
+        sub = subs[0]
+        self.assertEqual(sub["__email"], "a@x.com")
+        self.assertEqual(sub["__unsub"], "https://api.example/unsubscribe?id=abc&t=tk")
+        self.assertNotIn("evil", sub)
+        self.assertNotIn("email", sub)
 
 
 if __name__ == "__main__":
