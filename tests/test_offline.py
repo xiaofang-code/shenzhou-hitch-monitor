@@ -368,6 +368,13 @@ class TestSubscriberEmail(unittest.TestCase):
         self.mon._email_subscribers([Event("new", self.items[2])], ScanStats(total=3))
         self.assertEqual(self.smtp.sent, [])
 
+    def test_summary_skipped_without_admin_recipients(self):
+        self.smtp.to = []
+        events = [Event("new", i) for i in self.items]
+        self.assertEqual(self.mon.notify(self.mon.build_message(events, ScanStats(total=3))), 0)
+        self.mon._email_subscribers(events, ScanStats(total=3))
+        self.assertEqual(sorted(to for to, _ in self.smtp.sent), [["a@x.com"], ["b@x.com"]])
+
     def test_refresh_does_not_touch_admin_recipients(self):
         from unittest import mock
         subs = list(self.mon.subscriptions)

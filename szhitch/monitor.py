@@ -179,6 +179,8 @@ class Monitor:
     def notify(self, msg: Message) -> int:
         ok = 0
         for n in self.notifiers:
+            if getattr(n, "name", "") == "smtp" and not n.to:
+                continue  # 没配 SMTP_TO：SMTP 只用于订阅者邮件，不发汇总
             try:
                 n.send(msg)
                 ok += 1
