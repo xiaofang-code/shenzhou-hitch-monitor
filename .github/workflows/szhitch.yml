@@ -12,6 +12,7 @@ name: 神州顺风车监控
 #     SZHITCH_SMTP_USER  你的邮箱
 #     SZHITCH_SMTP_PASS  邮箱授权码（不是登录密码）
 #     SZHITCH_SMTP_TO    收件邮箱，多个用英文逗号分隔
+#     SZHITCH_SMTP_FROM  （可选）发件地址，缺省同 SMTP_USER；用 Resend 时必填，如 onboarding@resend.dev
 #     SZHITCH_WECOM      （可选）企业微信机器人 webhook
 #   Settings → Pages → Source 选 "GitHub Actions"
 #
@@ -71,6 +72,7 @@ jobs:
           SZHITCH_SMTP_USER: ${{ secrets.SZHITCH_SMTP_USER }}
           SZHITCH_SMTP_PASS: ${{ secrets.SZHITCH_SMTP_PASS }}
           SZHITCH_SMTP_TO: ${{ secrets.SZHITCH_SMTP_TO }}
+          SZHITCH_SMTP_FROM: ${{ secrets.SZHITCH_SMTP_FROM }}
           SZHITCH_WECOM: ${{ secrets.SZHITCH_WECOM }}
           SZHITCH_FEISHU: ${{ secrets.SZHITCH_FEISHU }}
           SZHITCH_BARK: ${{ secrets.SZHITCH_BARK }}
