@@ -45,8 +45,9 @@
 ## 5 分钟上手
 
 **不想碰命令行？** 打开看板 → 左侧选好城市 / 路线 / 品牌 → 填邮箱 → 点「⚡ 一键订阅」：
-条件会存成仓库里的一个 Issue，下一轮监控自动按它推送，**关闭 Issue 即退订**。
-邮件提醒：命中时监控会在订阅 Issue 下回执（GitHub 自动向订阅者发邮件，零配置）；
+部署了邮箱订阅 Worker（见「部署 → 邮箱订阅」）时**不需要 GitHub 账号**，到邮箱点确认链接即生效，每封提醒底部可一键退订；
+否则条件会存成仓库里的一个 Issue，下一轮监控自动按它推送，**关闭 Issue 即退订**。
+邮件提醒：Issue 订阅命中时监控会在 Issue 下回执（GitHub 自动向订阅者发邮件，零配置）；
 若在 Secrets 里配置了 SMTP（`SZHITCH_SMTP_HOST/_PORT/_USER/_PASS/_TO/_FROM`），还会**只把该订阅命中的车**单独发到订阅里填的邮箱（一人一封，互不可见）；`_TO` 收全量汇总。
 
 ```bash
@@ -303,6 +304,18 @@ docker run -d --name szhitch --restart always \
   -v $(pwd)/config.json:/app/config.json -v $(pwd)/data:/app/data \
   szhitch
 ```
+
+### 邮箱订阅（Cloudflare Worker，可选）
+
+`cloud/cf_worker/` 是一个 Worker + KV：看板提交邮箱和条件 → 发确认信 → 点确认才生效；
+监控每轮用密钥拉取已确认订阅，提醒邮件带退订链接。需要 SMTP（推荐 Resend）已配好。
+
+1. 改 `cloud/cf_worker/wrangler.toml`：KV id（`npx wrangler kv namespace create szhitch-subs`）、自定义域名、`MAIL_FROM`、`ALLOWED_ORIGINS`（看板所在域名）
+2. 在该目录 `npx wrangler deploy`，再 `wrangler secret put RESEND_API_KEY` 与 `wrangler secret put ADMIN_TOKEN`（随机长串）
+3. 仓库 Secrets 加 `SZHITCH_SUB_API`（Worker 地址）与 `SZHITCH_SUB_TOKEN`（同 ADMIN_TOKEN）
+
+> `*.workers.dev` 在国内基本打不开，务必挂自己的域名。
+> 仓库 Secrets 再加 `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID`，工作流会顺带把看板发布到 Cloudflare Pages（项目名 `szhitch`）。
 
 ### 阿里云函数计算 / 腾讯云 SCF
 

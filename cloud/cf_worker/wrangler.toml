@@ -15,4 +15,4 @@ kv_namespaces = [{ binding = "SUBS", id = "9ef1e176d6914236a505f91b45df2262" }]
 [vars]
 MAIL_FROM = "alert@relvexes.com"
 PUBLIC_URL = "https://hitch-api.relvexes.com"
-ALLOWED_ORIGINS = "https://xiaofang-code.github.io,https://hitch.relvexes.com"
+ALLOWED_ORIGINS = "https://xiaofang-code.github.io,https://hitch.relvexes.com,https://szhitch.pages.dev"
