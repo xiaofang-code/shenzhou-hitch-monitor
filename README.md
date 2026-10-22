@@ -47,7 +47,7 @@
 **不想碰命令行？** 打开看板 → 左侧选好城市 / 路线 / 品牌 → 填邮箱 → 点「⚡ 一键订阅」：
 条件会存成仓库里的一个 Issue，下一轮监控自动按它推送，**关闭 Issue 即退订**。
 邮件提醒：命中时监控会在订阅 Issue 下回执（GitHub 自动向订阅者发邮件，零配置）；
-若在 Secrets 里配置了 SMTP（`SZHITCH_SMTP_HOST/_PORT/_USER/_PASS/_TO`），还会直发邮件。
+若在 Secrets 里配置了 SMTP（`SZHITCH_SMTP_HOST/_PORT/_USER/_PASS/_TO/_FROM`），还会**只把该订阅命中的车**单独发到订阅里填的邮箱（一人一封，互不可见）；`_TO` 收全量汇总。
 
 ```bash
 python main.py init                      # 生成配置
@@ -222,7 +222,7 @@ pip install pypinyin && python tools/build_cities.py
 
 | 渠道 | 配置 | 环境变量 |
 |---|---|---|
-| **邮件** | `notify.smtp` | `SZHITCH_SMTP_HOST` / `_PORT` / `_USER` / `_PASS` / `_TO` |
+| **邮件** | `notify.smtp` | `SZHITCH_SMTP_HOST` / `_PORT` / `_USER` / `_PASS` / `_TO` / `_FROM`（可选，发件地址，缺省同 `_USER`） |
 | 企业微信群机器人 | `notify.wecom_webhook` | `SZHITCH_WECOM` |
 | 飞书 | `notify.feishu_webhook` + `feishu_secret` | `SZHITCH_FEISHU` |
 | 钉钉 | `notify.dingtalk_webhook` + `dingtalk_secret` | `SZHITCH_DINGTALK` |

@@ -330,6 +330,53 @@ class TestMessage(unittest.TestCase):
         self.assertIn("另有", msg.markdown)
 
 
+class FakeSmtp:
+    name = "smtp"
+
+    def __init__(self, to):
+        self.to = list(to)
+        self.sent: list[tuple[list[str], object]] = []  # copy.copy 后共享同一列表
+
+    def send(self, msg):
+        self.sent.append((list(self.to), msg))
+
+
+class TestSubscriberEmail(unittest.TestCase):
+    def setUp(self):
+        self.items = [HitchItem.from_api(p) for p in load_fixture_items()]
+        self.smtp = FakeSmtp(["admin@x.com"])
+        self.mon = Monitor(dict(BASE_CFG), client=FakeClient([]), store=FakeStore(),
+                           notifiers=[self.smtp], log=lambda *_: None)
+        self.mon.subscriptions = [
+            {"pickup_cities": [self.items[0].pickup_city], "__issue": 1, "__email": "a@x.com"},
+            {"pickup_cities": [self.items[1].pickup_city], "__issue": 2, "__email": "B@x.com "},
+            {"pickup_cities": [self.items[2].pickup_city], "__issue": 3},
+        ]
+
+    def test_each_subscriber_gets_only_own_hits(self):
+        events = [Event("new", i) for i in self.items]
+        self.mon._email_subscribers(events, ScanStats(total=3))
+        sent = {tuple(to): msg for to, msg in self.smtp.sent}
+        self.assertEqual(set(sent), {("a@x.com",), ("b@x.com",)})
+        self.assertIn(self.items[0].hitch_id, sent[("a@x.com",)].plain)
+        self.assertNotIn(self.items[1].hitch_id, sent[("a@x.com",)].plain)
+        self.assertIn(self.items[1].hitch_id, sent[("b@x.com",)].plain)
+        self.assertNotIn(self.items[0].hitch_id, sent[("b@x.com",)].plain)
+        self.assertEqual(self.smtp.to, ["admin@x.com"])
+
+    def test_no_mail_without_hits(self):
+        self.mon._email_subscribers([Event("new", self.items[2])], ScanStats(total=3))
+        self.assertEqual(self.smtp.sent, [])
+
+    def test_refresh_does_not_touch_admin_recipients(self):
+        from unittest import mock
+        subs = list(self.mon.subscriptions)
+        with mock.patch("szhitch.subscriptions.fetch_subscriptions", return_value=subs), \
+                mock.patch.dict("os.environ", {"GITHUB_REPOSITORY": "me/repo"}):
+            self.mon._refresh_subscriptions()
+        self.assertEqual(self.smtp.to, ["admin@x.com"])
+
+
 class TestStores(unittest.TestCase):
     def test_json_store_roundtrip(self):
         with tempfile.TemporaryDirectory() as tmp:
